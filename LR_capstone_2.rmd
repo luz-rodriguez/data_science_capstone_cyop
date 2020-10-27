@@ -1,0 +1,791 @@
+---
+title: 'Predicting Divorce with the DS Test: a qualitative approach'
+subtitle: "CYO - Data Science: Capstone"
+author: "Luz E Rodriguez"
+date: "October 2020"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r}
+
+if(!require(magrittr)) install.packages("magrittr", 
+                                        repos = "http://cran.us.r-project.org")
+if(!require(utils)) install.packages("utils", 
+                                        repos = "http://cran.us.r-project.org")
+if(!require(ggplot2)) install.packages("ggplot2", 
+                                       repos = "http://cran.us.r-project.org")
+if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
+if(!require(kableExtra)) install.packages("kableExtra", 
+                                          repos = "http://cran.us.r-project.org")
+if(!require(knitr)) install.packages("knitr", 
+                                     repos = "http://cran.us.r-project.org")
+if(!require(tibble)) install.packages("tibble", 
+                                      repos = "http://cran.us.r-project.org")
+if(!require(corrplot)) install.packages("corrplot", 
+                                        repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", 
+                                     repos = "http://cran.us.r-project.org")
+if(!require(mlbench)) install.packages("mlbench", 
+                                       repos = "http://cran.us.r-project.org")
+if(!require(gridExtra)) install.packages("gridExtra", 
+                                         repos = "http://cran.us.r-project.org")
+if(!require(ggridges)) install.packages("ggridges", 
+                                        repos = "http://cran.us.r-project.org")
+if(!require(factoextra)) install.packages("factoextra", 
+                                          repos = "http://cran.us.r-project.org")
+if(!require(rpart)) install.packages("rpart", 
+                                     repos = "http://cran.us.r-project.org")
+if(!require(rpart.plot)) install.packages("rpart.plot", 
+                                          repos = "http://cran.us.r-project.org")
+if(!require(randomForest)) install.packages("randomForest", 
+                                            repos = "http://cran.us.r-project.org")
+if(!require(Rtools)) install.packages("Rtools", 
+                                      repos = "https://cran.rstudio.com/bin/windows/Rtools/")
+```
+
+# 1. Project Overview
+
+I found this interesting article about Divorce Prediction https://dergipark.org.tr/en/download/article-file/748448. This is based on a Gottman's couples therapy research of more than 20 years and proposes that couples can find alert signs of divorce. If diagnosed on time, marriages can work on tackling their problems to have a happy marriage and avoid divorce. Gottman has designed therapies to help marriages to improve their quality of life and relationships. 
+
+The article analyzes a sample survey in Turkey and predicts divorce with 98% accuracy by using correlation based feature selection and artificial neural networks. 
+
+It is very exciting to be able to quantify emotions and behaviors and apply analytics in social sciences. It is also more difficult and biased because there are a lot of assumptions, like people are completely honest and that every person interpret the questions in the same way. That is why I want to explore this dataset and apply other prediction methods to see if I get the same prediction rate. I will predict a categorical variable, in this case whether a person will remain married(0) or will get divorced(1) based on their current behavior explained by the answers to the survey.
+
+# 2. Analysis
+
+## Data Set Description
+
+
+The dataset is taken from UCI Machine Learning Repository - Center for Machine Learning And Intelligent Systems https://archive.ics.uci.edu/ml/machine-learning-databases/00497/. This corresponds to a dataset from a questionnaire that ask participants several questions related to their behavior with their partners based on the Divorce Predictors Scale (DPS) from Gottman couples therapy. 
+
+The initial research https://dergipark.org.tr/en/download/article-file/748448 was developed by Dr. Mustafa Kemal Yöntem, Dr. Kemal ADEM, Prof. Dr. Tahsin İlhan, and Lecturer Serhat Kılıçarslan, inspired by Gottman's DPS couples therapy. 
+
+The survey had a total of 170 Turkish participants, 84 males and 86 females between 20 to 63 years old, from which 84 are divorced(49%) and 86 are married(51%) who answered 54 questions.  All responses were collected on a 5-point scale: (0=Never, 1=Seldom, 2=Averagely, 3=Frequently, 4=Always).
+
+The last variable **Class** indicates marital status as 0 for married and 1 for divorced.
+
+*Downloading the dataset*
+
+```{r, warning=FALSE, message=FALSE}
+# temp <- tempfile()
+# #temp2 <- tempfile()
+# utils::download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/00497/divorce.rar",temp, mode = "wb")
+# #list.files(temp)
+# try(gzfile(temp, "divorce.csv"))
+# #utils::gunzip(zipfile = temp, "divorce.csv")
+
+current_dir <- getwd()
+divorce <- utils::read.table(file.path(current_dir,"divorce.csv"), sep = ";", header = TRUE)
+#divorce2 <- read.table(url("https://archive.ics.uci.edu/ml/machine-learning-databases/00497/divorce.rar"), sep = ";", header = TRUE)
+rm(temp)
+
+```
+
+```{r}
+print("Split between married/divorced in dateset")
+(table(divorce$Class))
+
+```
+
+```{r}
+print("Summary scale responses")
+with(divorce, summary(Atr1))
+
+```
+
+```{r}
+print("Dataset glimpse")
+tibble::glimpse(divorce)
+
+```
+
+
+The survey design has some bias. From the initial article, the researchers explained that Turkey is among the 12 countries with increasing divorce rate (as of 2019 when the study was published). Divorced participants answered based on their marriage experience, while the married participants included were the ones who considered themselves as having a "happy marriage", without any thought of divorce. This means, married people who are having problems and have signs of divorce were excluded.
+
+The dataset does not include any demographic variables and only have the 54 questions' responses and marital status(output variable).
+
+
+*Attribute Information*
+
+1. When one of us apologizes when our discussions go bad, the issue does not extend.
+2. I know we can ignore our differences, even if things get hard sometimes.
+3. When we need to, we can take our discussions from the beginning and correct it.
+4. When I argue with my spouse, it will eventually work for me to contact him.
+5. The time I spent with my spouse is special for us.
+6. We don’t have time at home as partners.
+7. We are like two strangers who share the same environment at home rather than family.
+8. I enjoy our holidays with my spouse.
+9. I enjoy traveling with my spouse.
+10. My spouse and most of our goals are common.
+11. I think that some day, my spouse and I will bee in harmony with each other.
+12. My spouse and I have similar values regarding personal freedom.
+13. My spouse and I have similar entertainment.
+14. Most of our goals in regards to people (children, friends, etc.) are the same.
+15. My dreams of living are similar and harmonious with those of my spouse.
+16. I’m compatible with my spouse about what love should be.
+17. I share the same views with my spouse about being happy.
+18. My spouse and I have similar ideas about how marriage should be.
+19. My spouse and I have similar ideas about how roles should be in marriage.
+20. My spouse and I have similar values regarding trust.
+21. I know exactly what my spouse likes.
+22. I know how my spouse wants to be taken care of when she’s sick.
+23. I know my spouse’s favorite food.
+24. I can tell you what kind of stress my spouse is having in life.
+25. I have knowledge of my spouse’s inner world.
+26. I know my spouse’s basic concerns.
+27. I know what my spouse’s current sources of stress are.
+28. I know my spouse’s hopes and wishes.
+29. I know my spouse very well.
+30. I know my spouse’s friends and their social relationships.
+31. I feel aggressive when I argue with my spouse.
+32. When discussing with my spouse, I usually use expressions such as X, Y, Z.
+33. I can use negative statements about my spouse’s personality during our discussions.
+34. I can use offensive expressions during our discussions.
+35. I can insult our discussions.
+36. I can be humiliating when we argue.
+37. My argument with my spouse is not calm.
+38. I hate my spouse’s way of bringing it up.
+39. Fights often occur suddenly.
+40. We’re just starting a fight before I know what’s going on.
+41. When I talk to my spouse about something, my calm suddenly breaks.
+42. When I argue with my spouse, it only snaps in and I don’t say a word.
+43. I’m mostly willing to calm the environment a little bit.
+44. Sometimes I think it’s good for me to leave home for a while.
+45. I’d rather stay silent than argue with my spouse.
+46. Even if I’m right in the argument, I’m willing not to upset the other side.
+47. When I argue with my spouse, I remain silent because I am afraid of not being able to control my anger.
+48. I feel right in our discussions.
+49. I have nothing to do with what I’ve been accused of.
+50. I’m not actually the one who’s guilty of what I’m accused of.
+51. I’m not the one who’s wrong about problems at home.
+52. I wouldn’t hesitate to tell her about my spouse’s inadequacy.
+53. I remind my spouse of her inadequacies during our discussion.
+54. I’m not afraid to tell her about my spouse’s incompetence.
+
+
+
+## Data wrangling
+
+The decision variable *Class* is a binary variable, having married as 0 and divorced 1. I will adjust this vaiable as factor. Other than that, the dataste is very clean.
+
+```{r}
+divorce <- divorce %>% dplyr::mutate(Class = factor(Class))
+```
+
+
+## Datasets for model creation
+
+
+This dataset has only 170 rows. Being a small dataset, I will split the data in a 80-20 proportion for training and testing. There will not be a validation dataset.
+
+From the training dataset 50% of participants are divorced. From the testing dataset 48% are divorced. This is a very balanced split.
+
+```{r}
+set.seed(1, sample.kind="Rounding")
+
+test_index <- createDataPartition(y = divorce$Class, times = 1, p = 0.2, list = FALSE)
+
+divorce_training <-divorce[-test_index, ]
+
+divorce_testing <- divorce[test_index, ]
+
+print("Training set proportions:")
+prop.table(table(divorce_training$Class))
+
+print("Testing set proportions:")
+prop.table(table(divorce_testing$Class))
+```
+
+
+## Data Exploration
+
+- Dataset overview
+
+As explained before, there are 54 predictors, which are answers to a survey. The response scale is (0=Never, 1=Seldom, 2=Averagely, 3=Frequently, 4=Always).
+
+From the data summary we can see that more than 20 answers have a mean greater than 2.
+
+```{r}
+summary <- summary(divorce)
+summary
+
+```
+- Missing values 
+
+The dataset does not have any missing values that need to be removed or handle.
+
+```{r}
+table(is.na(divorce))
+```
+
+- Histograms of predictor variables
+
+A visual inspection tells us that the attributes that could predict divorce based on the counts and more filled as divorced are: atr1, atr3,atr13, atr25, atr32, atr39.
+
+```{r}
+## store predictor variables
+attributes <- setdiff(colnames(divorce), "Class")
+
+## initialize an empty list to store plots
+histograms = list()
+
+## initialize plot index
+i = 1
+
+## create plot and fill plot list
+
+for (attr in attributes) {
+  hist = ggplot2::ggplot(divorce_training) + 
+    ggplot2::geom_histogram(aes_string(x=attr, fill="Class"),
+                   position="stack", alpha=0.6) +
+    ggplot2::theme_classic() + 
+    ggplot2::theme(legend.position="bottom")
+    
+  histograms[[i]] = hist
+  i = i + 1
+}  
+## display plots. I will plot this graphs at the end after the references for clarity
+#histograms
+#do.call("grid.arrange", c(histograms, ncol=3))
+```
+
+- Evaluating variables correlation
+
+```{r}
+main_vars <- divorce_training[, 1:54]
+
+#calculating correlation among variables in divorce
+corr_divorce <- cor(main_vars)
+
+corrplot::corrplot(corr_divorce, type="upper", method="shade",tl.cex = 0.6)
+```
+
+
+The correlation chart shows there are many variables highly correlated, as shown with the darkets blue shade (values close to 1). We need to find the relevant variables to run a predictive model, thus, we want to remove highly correlated variables to avoid overfitting.
+
+
+- Eliminating highly correlated variables
+
+To efficiently reduce the amount of predictors, we will be using Principal Component Analisys (PCA)
+
+The first 9 elements account for 90% of the variability. The 25 first elements account for 98% of the variability.Only the first component explains 77% of the variability.
+
+```{r}
+x <- divorce_training[ ,attributes] #Selecting attributes from dataset
+
+divorce_training_pca <- prcomp(x) #Calculating PC from attributes
+summary(divorce_training_pca)
+```
+
+```{r}
+data.frame(divorce_training_pca$x[,1:2], Class=divorce_training$Class) %>% 
+  ggplot2::ggplot(aes(PC1,PC2, fill = Class))+
+  ggplot2::geom_point(cex=3, pch=21) +
+  ggplot2::coord_fixed(ratio = 1)+
+  ggplot2::ggtitle("Visual representation First Two Principal Components")
+```
+
+```{r}
+
+data.frame(divorce_training_pca$x[,2:3], Class=divorce_training$Class) %>% 
+  ggplot2::ggplot(aes(PC2,PC3, fill = Class))+
+  ggplot2::geom_point(cex=3, pch=21) +
+  ggplot2::coord_fixed(ratio = 1)+
+  ggplot2::ggtitle("Visual representation Principal Components 2 and 3")
+```
+
+Now we will create a new training and testing dataset with principal components to use in the modeling session.
+
+```{r}
+
+divorce_training_pc = as.data.frame(divorce_training_pca$x)
+divorce_training_pc$Class = divorce_training$Class
+head(divorce_training_pc)
+
+divorce_testing_pc = predict(divorce_training_pca, newdata = divorce_testing)
+divorce_testing_pc = as.data.frame(divorce_training_pc)
+divorce_testing_pc$class = divorce_testing$class
+```
+
+
+```{r}
+factoextra::fviz_eig(divorce_training_pca, addlabels=TRUE, 
+                     ylim=c(0,80), geom = c("bar", "line"), 
+                     barfill="lightblue", barcolor="grey", linecolor="blue", ncp=7) +
+ labs(title = "Variance Explained By Each Principal Component",
+         x = "Principal Components", y = "% of Variance")
+```
+
+
+The following chart also shows how the first component explains 72% of variability.
+
+```{r}
+factoextra::fviz_pca_biplot(divorce_training_pca, 
+                            col.ind = as.factor(divorce_training$Class), col="black",
+                palette = "lancet", geom = c("point"), repel=TRUE,
+                legend.title="Divorced Y: 1, N:0", addEllipses = TRUE)
+```
+
+## Models
+
+In this section I will explore different methods to predict divorce like logistic regression, kNN, decision trees and random forest and then compare which models provides the best accuracy. I will also use the models in the original data and with the principal components for comparison.
+
+### Baseline prediction
+
+Randomly guessing whether a person will get divorced based on the answers to the questionare, we get that 51% of them would get divorce. We assume that each person has an equal chance of getting divorced. Randomly guessing gives a divorce estimated greater than the value in the data set which is 43%. The accuracy of randomly guessing is just 63%.
+
+```{r}
+set.seed(3, sample.kind = "Rounding")
+# guess with equal probability of divorce
+guess_divorce <- sample(c(0,1), nrow(divorce_testing), replace = TRUE)
+#how many people would be divorced
+print("Proportion of people whow would get divorced")
+mean(guess_divorce)
+#Calculating accuracy comparing guessing with testing data set
+print("Accuracy")
+mean(guess_divorce == divorce_testing$Class)
+```
+
+
+```{r}
+### Accuracy table 
+summary_accuracy <- tibble(Method = "Baseline Prediction", Accuracy = 0.6285)
+summary_accuracy
+```
+
+### Logistic regression
+
+Logistic regression is a regression method where we calculate the probabilities of an output variable to belong to a certain class. Since the logistic regression model provides probabilites between 0-1, to predict the outcome I determine them as 1 or 0 like : if probability > 0.5 the outcome is 1 (divorced, that is our target variable), otherwise it is 0.
+
+- glm model with all data
+
+```{r}
+set.seed(3, sample.kind = "Rounding")
+logistic_model <- glm(Class ~.,family=binomial(link='logit'),data=divorce_training)
+
+#summary(logistic_model)
+```
+
+
+```{r}
+glm_preds_divorce <- predict(logistic_model, type="response")
+print("Divorce rate in logistic regression")
+mean((ifelse(glm_preds_divorce > 0.5, 1, 0)) == divorce_testing$Class)
+
+```
+
+- Accuracy in testing set Logistic regression
+
+```{r}
+## create prediction probabilities (on test dataset)
+glm_test_pred_probs = predict(logistic_model, type="response", newdata=divorce_testing)
+
+## create predictions (on test dataset)
+glm_test_preds = as.factor(ifelse(glm_test_pred_probs > 0.5, 1,0))
+
+## evaluate performance (on test dataset)
+confusionMatrix(glm_test_preds, divorce_testing$Class)
+```
+
+
+```{r}
+### Accuracy table 
+# Update table based on testing data
+summary_accuracy <- bind_rows(summary_accuracy, 
+                    tibble(Method = "Logistic Regression", 
+                           Accuracy = 0.9429))
+# Show table 
+knitr::kable(summary_accuracy)
+```
+
+- glm model with Principal Components data
+
+```{r}
+set.seed(3, sample.kind = "Rounding")
+logistic_model_pc <- glm(Class ~.,family=binomial(link='logit'),data=divorce_training_pc)
+
+```
+
+
+- Accuracy in testing set Principal Components Logistic regression
+
+```{r}
+## create prediction probabilities (on test dataset)
+glm_test_pred_probs_pc = predict(logistic_model_pc, type="response", 
+                                 newdata=divorce_testing_pc)
+
+## create predictions (on test dataset)
+glm_test_preds_pc = as.factor(ifelse(glm_test_pred_probs_pc > 0.5, 1,0))
+
+## evaluate performance (on test dataset)
+confusionMatrix(glm_test_preds_pc, divorce_testing_pc$Class)
+```
+
+
+```{r}
+### Accuracy table 
+# Update the accuracy table base on testing data
+summary_accuracy <- bind_rows(summary_accuracy, 
+                    tibble(Method = "Logistic Regression PC", 
+                           Accuracy = 1))
+# Show the RMSE improvement  
+knitr::kable(summary_accuracy)
+```
+
+### kNN Model
+
+- Model with all the data
+
+The kNN model (k-nearest neighbors) is a classification algorithm that consists of finding areas called neighbors. It will group the data points in areas measuring the distance between the points. The final value is the value more common among the neighbor.
+
+First, we finding best tune. For this model the best parameter is 3. It means that with 3 neighbors the model can classify the information accurately. Additional neighbors do not improve the accuracy, but actually decreases it.
+
+```{r}
+set.seed(3, sample.kind = "Rounding")    # simulate R 3.5
+train_knn_divorce <- train(Class ~ .,
+                     method = "knn",
+                     data = divorce_training,
+                     tuneGrid = data.frame(k = seq(3, 30, 2)))
+train_knn_divorce$bestTune
+```
+
+
+```{r}
+ggplot2::ggplot(train_knn_divorce) + 
+  ggplot2::geom_line(colour="#ba1ea8") + 
+  ggplot2::geom_point(colour="#ba1ea8", shape=4)+
+  ggplot2::scale_x_continuous(limits = c(0,10), breaks=seq(0,12,1)) + 
+  theme_minimal()
+  
+```
+
+```{r}
+knn_preds_divorce <- predict(train_knn_divorce, divorce_testing)
+mean(knn_preds_divorce == divorce_testing$Class)
+```
+
+```{r}
+### Accuracy table 
+# Update table 
+summary_accuracy <- bind_rows(summary_accuracy, 
+                    tibble(Method = "kNN original data", 
+                           Accuracy = 0.9714))
+# Show table 
+knitr::kable(summary_accuracy)
+```
+
+- kNN Crossvalidation
+
+Now I want to try crossvalidation to see if we can get a better model. Crossvalidation here is a nice tool since the dataset is small.
+
+```{r}
+
+set.seed(8, sample.kind = "Rounding")    # simulate R 3.5
+train_knn_cv_divorce <- train(Class ~ .,
+                         method = "knn",
+                         data = divorce_training,
+                         tuneGrid = data.frame(k = seq(3, 30, 2)),
+                         trControl = trainControl(method = "cv", number = 10, p = 0.9))
+train_knn_cv_divorce$bestTune
+
+```
+
+```{r}
+knn_cv_preds_divorce <- predict(train_knn_cv_divorce, divorce_testing)
+mean(knn_cv_preds_divorce == divorce_testing$Class)
+```
+
+```{r}
+### Accuracy table 
+# Update the table  
+summary_accuracy <- bind_rows(summary_accuracy, 
+                    tibble(Method = "kNN original data Cross Validation", 
+                           Accuracy = 0.9714))
+# Show table
+knitr::kable(summary_accuracy)
+```
+
+Crossvalidation in this case does not improve the accuracy.
+
+- kNN with only PCA
+
+Now I want to test if I get better results using the data with principal components. For this model, k is the same as the one obtained with the full training data.
+
+```{r}
+set.seed(3, sample.kind = "Rounding")    # simulate R 3.5
+train_knn_divorce_pc <- train(Class ~ .,
+                     method = "knn",
+                     data = divorce_training_pc,
+                     tuneGrid = data.frame(k = seq(3, 30, 2)))
+train_knn_divorce_pc$bestTune
+```
+
+
+```{r}
+knn_cv_preds_divorce_pc <- predict(train_knn_divorce_pc, divorce_testing_pc)
+mean(knn_cv_preds_divorce_pc == divorce_testing_pc$Class)
+```
+
+
+```{r}
+### Accuracy table 
+# Update the error table  
+summary_accuracy <- bind_rows(summary_accuracy, 
+                    tibble(Method = "kNN PC", 
+                           Accuracy = 0.9778))
+# Show the RMSE improvement  
+knitr::kable(summary_accuracy)
+```
+
+
+### Classification Tree
+
+- All the data
+
+A classification tree starts by moving into branches, which are observations about the the output variables to predict it. This is an instintive model that starts splitting the data and evaluates if it contributes to the decision variable. The process is repeated in a recursive manner evaluating all the variables until the new branches does not add value to the outcome variable.
+
+
+```{r}
+train_rpart_divorce = rpart::rpart(Class ~ ., 
+                     data = divorce_training, 
+                     method = 'class',
+                     control = rpart.control(minsplit=2),
+                     model = TRUE)
+
+## create prediction probabilities (on train dataset)
+rpart_train_pred_probs = predict(train_rpart_divorce)
+
+## create predictions (on train dataset)
+rpart_train_preds = as.factor(ifelse(rpart_train_pred_probs[ , 2] > 0.5, 1, 0))
+
+```
+
+
+
+```{r}
+rpart.plot::prp(train_rpart_divorce, main="Decision Tree to Predict Divorce")
+```
+
+```{r}
+ct_preds_divorce <- predict(train_rpart_divorce, divorce_testing)
+mean(ct_preds_divorce == divorce_testing$Class)
+
+```
+
+
+
+```{r}
+### Accuracy table 
+# Update the error table  
+summary_accuracy <- bind_rows(summary_accuracy, 
+                    tibble(Method = "Classification tree", 
+                           Accuracy = 0.5))
+# Show the Accuracy table 
+knitr::kable(summary_accuracy)
+```
+
+```{r}
+
+varImp(train_rpart_divorce) 
+```
+From the classification tree we found that the main attributes to predict divorce are Atrr 20,19,18,17,11,26,28,3,34,36,39 and 40. All this questions are related to knowing your spouse and her/his needs.When people have low scores on those questions that highly predicts divorce.
+
+- Classification tree principal components
+
+```{r}
+train_rpart_divorce_pc = rpart::rpart(Class ~ ., 
+                     data = divorce_training_pc, 
+                     method = 'class',
+                     control = rpart.control(minsplit=2),
+                     model = TRUE)
+
+## create prediction probabilities (on train dataset)
+rpart_train_pred_probs_pc = predict(train_rpart_divorce_pc)
+
+## create predictions (on train dataset)
+rpart_train_preds_pc = as.factor(ifelse(rpart_train_pred_probs_pc[ , 2] > 0.5, 1, 0))
+
+```
+
+
+```{r}
+rpart.plot::prp(train_rpart_divorce_pc , main="Decision Tree to Predict Divorce PC")
+
+```
+
+Since the first principal component explains 73% of the variability, it is not surprised that PC1 is picked on the decision tree. However the accuracy is not improved.
+
+_*Accuracy*_
+
+
+```{r}
+ct_preds_divorce_pc <- predict(train_rpart_divorce_pc, divorce_testing_pc)
+mean(ct_preds_divorce_pc == divorce_testing_pc$Class)
+```
+
+
+```{r}
+### Accuracy table 
+# Update the error table  
+summary_accuracy <- bind_rows(summary_accuracy, 
+                    tibble(Method = "Classification tree PC", 
+                           Accuracy = 0.5))
+# Show the Accuracy table 
+knitr::kable(summary_accuracy)
+```
+
+
+
+### Random Forest
+
+- All data
+
+```{r}
+set.seed(14, sample.kind = "Rounding")    # simulate R 3.5
+train_rf_divorce <- train(Class ~ .,
+                    data = divorce_training,
+                    method = "rf",
+                    ntree = 100,
+                    tuneGrid = data.frame(mtry = seq(1:7)))
+train_rf_divorce$bestTune
+```
+
+```{r}
+rf_preds_divorce <- predict(train_rf_divorce, divorce_testing)
+mean(rf_preds_divorce == divorce_testing$Class)
+
+```
+
+```{r}
+varImp(train_rf_divorce) 
+```
+
+Random forest shows the top 3 variables predicting divorce are Atr 23,40,36.
+
+23. I know my spouse’s favorite food.
+36. I can be humiliating when we argue.
+40. We’re just starting a fight before I know what’s going on.
+
+```{r}
+train_rf_divorce$finalModel # inspect final model
+
+# make plot of decision tree
+plot(train_rf_divorce$finalModel, margin = 0.1)
+
+```
+
+```{r}
+
+train_rf <- randomForest(Class ~ ., data=divorce_training)
+
+confusionMatrix(predict(train_rf, divorce_testing),
+                divorce_testing$Class)$overall["Accuracy"]
+```
+
+```{r}
+### Accuracy table 
+# Update the error table  
+summary_accuracy <- bind_rows(summary_accuracy, 
+                    tibble(Method = "Random Forest", 
+                           Accuracy = 0.9714))
+# Show table
+knitr::kable(summary_accuracy)
+```
+
+
+- Random Forest with Principal Components
+
+```{r}
+set.seed(14, sample.kind = "Rounding")    # simulate R 3.5
+train_rf_divorce_pc <- train(Class ~ .,
+                    data = divorce_training_pc,
+                    method = "rf",
+                    ntree = 100,
+                    tuneGrid = data.frame(mtry = seq(1:7)))
+train_rf_divorce$bestTune
+```
+
+```{r}
+rf_preds_divorce_pc <- predict(train_rf_divorce_pc, divorce_testing_pc)
+mean(rf_preds_divorce_pc == divorce_testing_pc$Class)
+
+```
+
+```{r}
+varImp(train_rf_divorce_pc) 
+```
+
+```{r}
+train_rf_divorce_pc$finalModel # inspect final model
+
+# make plot of decision tree
+plot(train_rf_divorce_pc$finalModel, margin = 0.1)
+#text(train_rf_divorce$finalModel)
+```
+
+```{r}
+
+train_rf_pc <- randomForest(Class ~ ., data=divorce_training_pc)
+
+confusionMatrix(predict(train_rf_pc, divorce_testing_pc),
+                divorce_testing_pc$Class)$overall["Accuracy"]
+```
+
+```{r}
+### Accuracy table 
+# Update the error table  
+summary_accuracy <- bind_rows(summary_accuracy, 
+                    tibble(Method = "Random Forest PC", 
+                           Accuracy = 1))
+# Show the RMSE improvement  
+knitr::kable(summary_accuracy)
+```
+
+## Results
+
+After running logistic regression, kNN method, classification tree and Random Forest on the divorce dataset to predict divorce in couples based on their answers to the survey, I found that the best models are Logistic Regression and Random Forest when using Principal Components in both with Accuracy of 1. The worse model was classification tree. It seems to be because once it takes one branch, adding other variables are not very powerful when predicting in the test data. Random Forest and kNN with the original data have the same accuracy.
+
+Even though this is a very subjective topic,it is interesting that from random forest the main variable to predict divorce is not knowing something basic as your spouse's favorite food. The other 2 variables are related to unhealthy behaviors on the relationship.
+
+*Main variables that predict divorce based on Random Forest with PC*
+
+23. I know my spouse’s favorite food.
+36. I can be humiliating when we argue.
+40. We’re just starting a fight before I know what’s going on.
+
+
+```{r}
+knitr::kable(summary_accuracy)
+```
+
+## Conclusion
+
+This was a great exercise to compare different classification methods. I wanted to explore this type of models since this is usually applied for situations that are more difficult to represent in a model. In this case, evaluating whether a person would get divorce is very subjective and it is a field out of my expertise. Just starting, the data exploration requires creativity, We can't have regular histograms or counts like what you do with continuous variables. An additional issue, is that we have more than 50 predictors. Trying to understand all of them was not easy. It was helpful to use the *for* loop. 
+
+On the modeling side, it was useful to run the models to see how much the accuracy changes if you use the original data or principal components. Regarding Principal Components, since in this dataset the first component explained more than 70% of the variability it was not surprising that this was the best predictor.
+
+
+## References
+
+1. Divorce Analysis in R by Howard, https://www.rpubs.com/howard_song/538809
+2. Data Science Book from Rafael Irizarry, https://rafalab.github.io/dsbook/
+3. Predicting whether a couple is going to get divorced or not using artificial neural networks by Ibrahim M. Nasser: http://dstore.alazhar.edu.ps/xmlui/bitstream/handle/123456789/545/IJEAIS191007.pdf?sequence=1&isAllowed=y
+4. Initial research by Mustafa Kemal, Kemal Adem, Tahsin Ilhan and Serhat Kilicarslan: Divorce prediction using correlation based feature selection and artificial neural networks https://dergipark.org.tr/en/download/article-file/748448
+
+## Others
+
+Dataset variables histograms
+
+```{r}
+histograms
+```
+
