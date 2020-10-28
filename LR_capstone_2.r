@@ -1,6 +1,6 @@
 
 #####################################################################################
-####        "Predicting Divorce with the DS Test: a qualitative approach         ####
+####        "Predicting Divorce with the DS Test: a quantitative approach         ####
 ####         "Luz Elena Rodriguez - 2020"                                        ####  
 #####################################################################################
 
