@@ -33,15 +33,11 @@ if(!require(Rtools)) install.packages("Rtools", repos = "https://cran.rstudio.co
 #The dataset is taken from UCI Machine Learning Repository - Center for Machine Learning And Intelligent Systems
 #https://archive.ics.uci.edu/ml/machine-learning-databases/00497/. 
 
-#Downloading the dataset
+#Reading the dataset from current directory
 
-temp <- getwd()#tempfile()
-download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/00497/divorce.rar",temp, mode = "wb")
-con <- unzip(temp, "divorce.csv")
-try(gzfile(temp, "divorce.csv"))
-divorce <- read.table("divorce.csv", sep = ";", header = TRUE)
-divorce2 <- read.table(con, sep = ";", header = TRUE)
-rm(temp)
+current_dir <- getwd()
+divorce <- utils::read.table(file.path(current_dir,"divorce.csv"), 
+                             sep = ";", header = TRUE)
 
 #Exploring dataset
 print("Split between married/divorced in dateset")
@@ -508,4 +504,4 @@ summary_accuracy <- bind_rows(summary_accuracy,
 # Show the RMSE improvement  
 knitr::kable(summary_accuracy)
  
-###########################################################################################
+########################################################################################### END
